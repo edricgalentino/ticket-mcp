@@ -28,7 +28,10 @@ const fail = (message: string): ToolResult => ({
 });
 
 const status = z.enum(STATUSES);
-const ticketId = z.string().min(1).describe("The Ticket's id.");
+const ticketId = z
+  .string()
+  .min(1)
+  .describe("The Ticket's id, as returned by create_ticket or list_tickets.");
 
 /**
  * Strict objects throughout: an unknown argument is an error, not something to
@@ -54,9 +57,21 @@ const schemas = {
   }),
   update_ticket: z.strictObject({
     ticketId,
-    title: z.string().min(1).optional(),
-    description: z.string().optional(),
-    assigneeId: z.string().nullish(),
+    title: z
+      .string()
+      .min(1)
+      .optional()
+      .describe("New title. Omit to leave the current one unchanged."),
+    description: z
+      .string()
+      .optional()
+      .describe("New description. Omit to leave unchanged; pass \"\" to clear."),
+    assigneeId: z
+      .string()
+      .nullish()
+      .describe(
+        "User id to assign to. Omit to leave unchanged; pass null to unassign.",
+      ),
   }),
   delete_ticket: z.strictObject({ ticketId }),
   transition_ticket: z.strictObject({
