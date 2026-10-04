@@ -18,3 +18,9 @@ The web application and the MCP server authenticate by entirely different means
 (email/password session vs. bearer token) and converge on one service layer.
 Authorization therefore belongs in the service layer, not in either entry point,
 because neither entry point sees both kinds of caller.
+
+To make that possible the service takes a whole `Principal`, not a bare user id.
+It does not yet *enforce* anything with it: there are no roles, one Agent and
+two seeded people, so any Principal may act on any Ticket. The parameter exists
+so that a policy has somewhere to live, and so the ADR describes the code. If
+roles arrive and the service still ignores `kind`, this ADR is a lie.

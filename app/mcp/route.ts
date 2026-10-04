@@ -9,7 +9,7 @@ import { createTicketService } from "@/lib/tickets/service";
 
 export const dynamic = "force-dynamic";
 
-const UNAUTHORIZED = () =>
+const unauthorized = () =>
   Response.json(
     {
       jsonrpc: "2.0",
@@ -17,6 +17,21 @@ const UNAUTHORIZED = () =>
       id: null,
     },
     { status: 401, headers: { "WWW-Authenticate": 'Bearer realm="ticket-mcp"' } },
+  );
+
+const misconfigured = () =>
+  Response.json(
+    {
+      jsonrpc: "2.0",
+      error: {
+        code: -32603,
+        message:
+          "Server misconfigured: MCP_AGENT_EMAIL is unset, or no Agent row " +
+          "matches it. Run `npm run seed`.",
+      },
+      id: null,
+    },
+    { status: 500 },
   );
 
 async function agentUserId(): Promise<string | null> {
@@ -32,13 +47,20 @@ async function agentUserId(): Promise<string | null> {
 
 export async function POST(request: Request): Promise<Response> {
   const token = process.env.MCP_BEARER_TOKEN ?? "";
-  const userId = await agentUserId();
-  if (!token || !userId) return UNAUTHORIZED();
+  if (!token) return unauthorized();
 
-  const principal = createPrincipalResolver({ token, agentUserId: userId })(
-    request,
-  );
-  if (!principal) return UNAUTHORIZED();
+  // The token is checked before the database is touched, so an unauthenticated
+  // request costs no query. The Agent id is a placeholder until it resolves.
+  if (!createPrincipalResolver({ token, agentUserId: "" })(request)) {
+    return unauthorized();
+  }
+
+  // The token was good, so a failure past this point is the server's fault,
+  // not the caller's. Saying 401 here would tell a correctly-configured client
+  // that its token is wrong.
+  const userId = await agentUserId();
+  if (!userId) return misconfigured();
+  const principal = { userId, kind: "agent" as const };
 
   const tools = createTicketTools(createTicketService(getDatabase()));
   const server = createMcpServer(tools, principal);

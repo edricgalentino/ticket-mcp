@@ -1,4 +1,5 @@
 import { beforeEach, describe, expect, it } from "vitest";
+import type { Principal } from "@/lib/auth/principal";
 import { createInMemoryDatabase } from "@/lib/db";
 import { users } from "@/lib/db/schema";
 import {
@@ -6,6 +7,10 @@ import {
   TicketNotFoundError,
   createTicketService,
 } from "./service";
+
+const ANA: Principal = { userId: "u-ana", kind: "human" };
+const BO: Principal = { userId: "u-bo", kind: "human" };
+const AGENT: Principal = { userId: "u-agent", kind: "agent" };
 
 async function setup() {
   const db = createInMemoryDatabase();
@@ -29,12 +34,12 @@ beforeEach(async () => {
 
 describe("transitionTicket", () => {
   it("rejects a move that is not a legal Transition", async () => {
-    const ticket = await ctx.service.createTicket("u-ana", {
+    const ticket = await ctx.service.createTicket(ANA, {
       title: "Ship the MCP server",
     });
 
     await expect(
-      ctx.service.transitionTicket("u-ana", {
+      ctx.service.transitionTicket(ANA, {
         ticketId: ticket.id,
         to: "Done",
       }),
@@ -42,12 +47,12 @@ describe("transitionTicket", () => {
   });
 
   it("tells the caller which Transitions were legal instead of only saying no", async () => {
-    const ticket = await ctx.service.createTicket("u-ana", {
+    const ticket = await ctx.service.createTicket(ANA, {
       title: "Ship the MCP server",
     });
 
     await expect(
-      ctx.service.transitionTicket("u-ana", {
+      ctx.service.transitionTicket(ANA, {
         ticketId: ticket.id,
         to: "Done",
       }),
@@ -57,11 +62,11 @@ describe("transitionTicket", () => {
 
 describe("transitionTicket, when the move is legal", () => {
   it("moves the ticket and records the move in its history", async () => {
-    const ticket = await ctx.service.createTicket("u-ana", {
+    const ticket = await ctx.service.createTicket(ANA, {
       title: "Ship the MCP server",
     });
 
-    await ctx.service.transitionTicket("u-ana", {
+    await ctx.service.transitionTicket(ANA, {
       ticketId: ticket.id,
       to: "InProgress",
       note: "picked this up",
@@ -79,8 +84,8 @@ describe("transitionTicket, when the move is legal", () => {
   });
 
   it("records a transition with no note when none is given", async () => {
-    const ticket = await ctx.service.createTicket("u-ana", { title: "Seed data" });
-    await ctx.service.transitionTicket("u-ana", {
+    const ticket = await ctx.service.createTicket(ANA, { title: "Seed data" });
+    await ctx.service.transitionTicket(ANA, {
       ticketId: ticket.id,
       to: "InProgress",
     });
@@ -90,10 +95,10 @@ describe("transitionTicket, when the move is legal", () => {
   });
 
   it("accumulates history across the full cycle, including the reopen", async () => {
-    const ticket = await ctx.service.createTicket("u-ana", { title: "Round trip" });
-    await ctx.service.transitionTicket("u-ana", { ticketId: ticket.id, to: "InProgress" });
-    await ctx.service.transitionTicket("u-bo", { ticketId: ticket.id, to: "Done" });
-    await ctx.service.transitionTicket("u-agent", { ticketId: ticket.id, to: "Todo" });
+    const ticket = await ctx.service.createTicket(ANA, { title: "Round trip" });
+    await ctx.service.transitionTicket(ANA, { ticketId: ticket.id, to: "InProgress" });
+    await ctx.service.transitionTicket(BO, { ticketId: ticket.id, to: "Done" });
+    await ctx.service.transitionTicket(AGENT, { ticketId: ticket.id, to: "Todo" });
 
     const after = await ctx.service.getTicket(ticket.id);
     expect(after.status).toBe("Todo");
@@ -107,9 +112,9 @@ describe("transitionTicket, when the move is legal", () => {
 
 describe("updateTicket", () => {
   it("changes title, description and assignee", async () => {
-    const ticket = await ctx.service.createTicket("u-ana", { title: "Draft" });
+    const ticket = await ctx.service.createTicket(ANA, { title: "Draft" });
 
-    const updated = await ctx.service.updateTicket("u-ana", {
+    const updated = await ctx.service.updateTicket(ANA, {
       ticketId: ticket.id,
       title: "Ship the MCP server",
       description: "Six tools, one route handler.",
@@ -124,11 +129,11 @@ describe("updateTicket", () => {
   });
 
   it("can unassign a ticket", async () => {
-    const ticket = await ctx.service.createTicket("u-ana", {
+    const ticket = await ctx.service.createTicket(ANA, {
       title: "Draft",
       assigneeId: "u-bo",
     });
-    const updated = await ctx.service.updateTicket("u-ana", {
+    const updated = await ctx.service.updateTicket(ANA, {
       ticketId: ticket.id,
       assigneeId: null,
     });
@@ -136,12 +141,12 @@ describe("updateTicket", () => {
   });
 
   it("leaves fields alone when they are not supplied", async () => {
-    const ticket = await ctx.service.createTicket("u-ana", {
+    const ticket = await ctx.service.createTicket(ANA, {
       title: "Keep me",
       description: "and me",
       assigneeId: "u-bo",
     });
-    const updated = await ctx.service.updateTicket("u-ana", {
+    const updated = await ctx.service.updateTicket(ANA, {
       ticketId: ticket.id,
       title: "Renamed",
     });
@@ -155,9 +160,9 @@ describe("updateTicket", () => {
   // ADR 0003: status moves only through transitionTicket. MCP arguments arrive
   // as untyped JSON, so a caller smuggling a status through must be ignored.
   it("cannot change status, even when one is smuggled in", async () => {
-    const ticket = await ctx.service.createTicket("u-ana", { title: "Draft" });
+    const ticket = await ctx.service.createTicket(ANA, { title: "Draft" });
 
-    const updated = await ctx.service.updateTicket("u-ana", {
+    const updated = await ctx.service.updateTicket(ANA, {
       ticketId: ticket.id,
       title: "Renamed",
       status: "Done",
@@ -172,18 +177,18 @@ describe("updateTicket", () => {
 
 describe("listTickets", () => {
   async function threeTickets() {
-    const a = await ctx.service.createTicket("u-ana", {
+    const a = await ctx.service.createTicket(ANA, {
       title: "Assigned to Bo",
       assigneeId: "u-bo",
     });
-    const b = await ctx.service.createTicket("u-bo", {
+    const b = await ctx.service.createTicket(BO, {
       title: "Assigned to nobody",
     });
-    const c = await ctx.service.createTicket("u-agent", {
+    const c = await ctx.service.createTicket(AGENT, {
       title: "Agent's own, in progress",
       assigneeId: "u-agent",
     });
-    await ctx.service.transitionTicket("u-agent", {
+    await ctx.service.transitionTicket(AGENT, {
       ticketId: c.id,
       to: "InProgress",
     });
@@ -223,30 +228,30 @@ describe("listTickets", () => {
 
 describe("deleteTicket", () => {
   it("removes the ticket", async () => {
-    const ticket = await ctx.service.createTicket("u-ana", { title: "Doomed" });
-    await ctx.service.deleteTicket(ticket.id);
+    const ticket = await ctx.service.createTicket(ANA, { title: "Doomed" });
+    await ctx.service.deleteTicket(ANA, ticket.id);
     await expect(ctx.service.getTicket(ticket.id)).rejects.toThrow(
       TicketNotFoundError,
     );
   });
 
   it("takes the ticket's transition history with it", async () => {
-    const ticket = await ctx.service.createTicket("u-ana", { title: "Doomed" });
-    await ctx.service.transitionTicket("u-ana", {
+    const ticket = await ctx.service.createTicket(ANA, { title: "Doomed" });
+    await ctx.service.transitionTicket(ANA, {
       ticketId: ticket.id,
       to: "InProgress",
     });
-    await ctx.service.deleteTicket(ticket.id);
+    await ctx.service.deleteTicket(ANA, ticket.id);
 
     // The cascade itself is not observable through the public interface once
     // the Ticket is gone, so what is asserted here is that a later Ticket does
     // not inherit the dead one's history.
-    const survivor = await ctx.service.createTicket("u-ana", { title: "Alive" });
+    const survivor = await ctx.service.createTicket(ANA, { title: "Alive" });
     expect((await ctx.service.getTicket(survivor.id)).history).toHaveLength(0);
   });
 
   it("refuses to delete a ticket that is not there", async () => {
-    await expect(ctx.service.deleteTicket("nope")).rejects.toThrow(
+    await expect(ctx.service.deleteTicket(ANA, "nope")).rejects.toThrow(
       TicketNotFoundError,
     );
   });

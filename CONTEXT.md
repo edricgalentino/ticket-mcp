@@ -25,7 +25,13 @@ _Avoid_: Move, Change, Update, Status change
 **User**:
 An account that can sign in to the web application with an email address and a
 password.
-_Avoid_: Account, Member, Person, Principal
+_Avoid_: Account, Member, Person
+
+**Principal**:
+Whoever is making a request: a User signed in through the browser, or an Agent
+presenting a token. Distinct from User, because not every Principal is a person
+and not every User is making a request.
+_Avoid_: Caller, Identity, Actor, Subject
 
 **Agent**:
 An automated caller that reaches the system over MCP rather than through the

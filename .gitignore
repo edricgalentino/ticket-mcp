@@ -42,6 +42,9 @@ yarn-error.log*
 *.sqlite
 *.sqlite3
 
+# machine-specific: hardcodes a local Node path
+.claude/launch.json
+
 # vercel
 .vercel
 

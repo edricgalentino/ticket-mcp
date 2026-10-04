@@ -3,7 +3,7 @@ import { index, integer, sqliteTable, text } from "drizzle-orm/sqlite-core";
 import { STATUSES } from "@/lib/tickets/transitions";
 
 /**
- * A User is an account. An Agent is a User that cannot sign in: see
+ * A User is a sign-in identity. An Agent is a User that cannot sign in: see
  * docs/adr/0002-agents-are-users-that-cannot-sign-in.md. Agents are
  * distinguished by `kind`, and carry no password hash at all.
  */

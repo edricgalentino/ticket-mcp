@@ -19,11 +19,28 @@ export async function createTicketAction(formData: FormData): Promise<void> {
   if (!title) return;
 
   const assigneeId = String(formData.get("assigneeId") ?? "") || null;
-  await createTicketService(getDatabase()).createTicket(principal.userId, {
+  await createTicketService(getDatabase()).createTicket(principal, {
     title,
     description: String(formData.get("description") ?? ""),
     assigneeId,
   });
+  revalidatePath("/");
+}
+
+export async function updateTicketAction(formData: FormData): Promise<void> {
+  const principal = await requirePrincipal();
+  const ticketId = String(formData.get("ticketId") ?? "");
+  const title = String(formData.get("title") ?? "").trim();
+  if (!ticketId || !title) return;
+
+  // Status is absent here by design, not by omission. ADR 0003.
+  await createTicketService(getDatabase()).updateTicket(principal, {
+    ticketId,
+    title,
+    description: String(formData.get("description") ?? ""),
+    assigneeId: String(formData.get("assigneeId") ?? "") || null,
+  });
+  revalidatePath(`/tickets/${ticketId}`);
   revalidatePath("/");
 }
 
@@ -36,7 +53,7 @@ export async function transitionTicketAction(
   if (!ticketId || !isStatus(to)) return;
 
   const note = String(formData.get("note") ?? "").trim() || null;
-  await createTicketService(getDatabase()).transitionTicket(principal.userId, {
+  await createTicketService(getDatabase()).transitionTicket(principal, {
     ticketId,
     to,
     note,
@@ -46,10 +63,10 @@ export async function transitionTicketAction(
 }
 
 export async function deleteTicketAction(formData: FormData): Promise<void> {
-  await requirePrincipal();
+  const principal = await requirePrincipal();
   const ticketId = String(formData.get("ticketId") ?? "");
   if (!ticketId) return;
-  await createTicketService(getDatabase()).deleteTicket(ticketId);
+  await createTicketService(getDatabase()).deleteTicket(principal, ticketId);
   revalidatePath("/");
   redirect("/");
 }

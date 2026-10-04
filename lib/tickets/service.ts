@@ -1,4 +1,5 @@
 import { and, asc, desc, eq, isNull } from "drizzle-orm";
+import type { Principal } from "@/lib/auth/principal";
 import type { Database } from "@/lib/db";
 import { tickets, transitions } from "@/lib/db/schema";
 import type { TicketRow, TransitionRow } from "@/lib/db/schema";
@@ -86,9 +87,13 @@ export function createTicketService(db: Database) {
     },
 
     async createTicket(
-      actorId: string,
+      actor: Principal,
       input: CreateTicketInput,
     ): Promise<TicketRow> {
+      // Written explicitly rather than left to the DDL's CURRENT_TIMESTAMP,
+      // which has second precision and a different string format. One shape
+      // per column, and enough precision for "newest first" to mean something.
+      const now = new Date().toISOString();
       const [row] = await db
         .insert(tickets)
         .values({
@@ -96,8 +101,10 @@ export function createTicketService(db: Database) {
           title: input.title,
           description: input.description ?? "",
           status: "Todo",
-          reporterId: actorId,
+          reporterId: actor.userId,
           assigneeId: input.assigneeId ?? null,
+          createdAt: now,
+          updatedAt: now,
         })
         .returning();
       return row;
@@ -122,13 +129,13 @@ export function createTicketService(db: Database) {
       ).orderBy(desc(tickets.createdAt), desc(tickets.id));
     },
 
-    async deleteTicket(ticketId: string): Promise<void> {
+    async deleteTicket(_actor: Principal, ticketId: string): Promise<void> {
       await requireTicket(ticketId);
       await db.delete(tickets).where(eq(tickets.id, ticketId));
     },
 
     async updateTicket(
-      _actorId: string,
+      _actor: Principal,
       input: UpdateTicketInput,
     ): Promise<TicketRow> {
       await requireTicket(input.ticketId);
@@ -149,24 +156,36 @@ export function createTicketService(db: Database) {
     },
 
     async transitionTicket(
-      actorId: string,
+      actor: Principal,
       input: TransitionTicketInput,
     ): Promise<TicketRow> {
-      const ticket = await requireTicket(input.ticketId);
-      const from = ticket.status;
-
-      if (!isLegalTransition(from, input.to)) {
-        throw new IllegalTransitionError(
-          from,
-          input.to,
-          legalTransitionsFrom(from),
-        );
-      }
-
+      // The read, the legality check and both writes are one transaction, so
+      // two concurrent transitions cannot both pass the check and leave the
+      // history disagreeing with the Ticket's status.
       return db.transaction((tx) => {
+        const [ticket] = tx
+          .select()
+          .from(tickets)
+          .where(eq(tickets.id, input.ticketId))
+          .limit(1)
+          .all();
+        if (!ticket) throw new TicketNotFoundError(input.ticketId);
+
+        const from = ticket.status;
+        if (!isLegalTransition(from, input.to)) {
+          throw new IllegalTransitionError(
+            from,
+            input.to,
+            legalTransitionsFrom(from),
+          );
+        }
+
+        // One timestamp for both rows: they describe the same event.
+        const now = new Date().toISOString();
+
         const [updated] = tx
           .update(tickets)
-          .set({ status: input.to, updatedAt: new Date().toISOString() })
+          .set({ status: input.to, updatedAt: now })
           .where(eq(tickets.id, ticket.id))
           .returning()
           .all();
@@ -177,8 +196,8 @@ export function createTicketService(db: Database) {
             fromStatus: from,
             toStatus: input.to,
             note: input.note ?? null,
-            actorId,
-            createdAt: new Date().toISOString(),
+            actorId: actor.userId,
+            createdAt: now,
           })
           .run();
 

@@ -61,7 +61,7 @@ const schemas = {
   delete_ticket: z.strictObject({ ticketId }),
   transition_ticket: z.strictObject({
     ticketId,
-    to: status.describe("The Status to move to."),
+    to: status.describe("The Status to transition to."),
     note: z.string().nullish().describe("Why. Recorded in the Ticket's history."),
   }),
 };
@@ -75,11 +75,20 @@ function describeZodError(error: z.ZodError): string {
     .join("; ");
 }
 
+/**
+ * Domain errors are written for the caller and are returned as-is. Anything
+ * else is a database or runtime message that the caller has no business
+ * seeing, so it is logged here and reported generically.
+ */
 function explain(error: unknown): string {
-  if (error instanceof IllegalTransitionError) return error.message;
-  if (error instanceof TicketNotFoundError) return error.message;
-  if (error instanceof Error) return error.message;
-  return String(error);
+  if (
+    error instanceof IllegalTransitionError ||
+    error instanceof TicketNotFoundError
+  ) {
+    return error.message;
+  }
+  console.error("[ticket-mcp] unexpected tool failure:", error);
+  return "The operation failed unexpectedly. Check the server logs.";
 }
 
 export function createTicketTools(service: TicketService): TicketTool[] {
@@ -111,7 +120,7 @@ export function createTicketTools(service: TicketService): TicketTool[] {
       "Create a new Ticket. It starts in the Todo status and is reported by the calling principal.",
       schemas.create_ticket,
       (args, principal) =>
-        service.createTicket(principal.userId, {
+        service.createTicket(principal, {
           title: args.title,
           description: args.description,
           assigneeId: args.assigneeId ?? null,
@@ -138,7 +147,7 @@ export function createTicketTools(service: TicketService): TicketTool[] {
       "Change a Ticket's title, description or assignee. Cannot change status: use transition_ticket for that.",
       schemas.update_ticket,
       (args, principal) =>
-        service.updateTicket(principal.userId, {
+        service.updateTicket(principal, {
           ticketId: args.ticketId,
           title: args.title,
           description: args.description,
@@ -149,17 +158,17 @@ export function createTicketTools(service: TicketService): TicketTool[] {
       "delete_ticket",
       "Permanently delete a Ticket and its Transition history. This cannot be undone.",
       schemas.delete_ticket,
-      async (args) => {
-        await service.deleteTicket(args.ticketId);
+      async (args, principal) => {
+        await service.deleteTicket(principal, args.ticketId);
         return { deleted: args.ticketId };
       },
     ),
     tool(
       "transition_ticket",
-      "Move a Ticket to another Status. Only legal Transitions are accepted; a refusal names the ones that were allowed.",
+      "Transition a Ticket to another Status. Only legal Transitions are accepted; a refusal names the ones that were allowed.",
       schemas.transition_ticket,
       (args, principal) =>
-        service.transitionTicket(principal.userId, {
+        service.transitionTicket(principal, {
           ticketId: args.ticketId,
           to: args.to,
           note: args.note,

@@ -6,6 +6,7 @@ import { users } from "@/lib/db/schema";
 import {
   deleteTicketAction,
   transitionTicketAction,
+  updateTicketAction,
 } from "@/lib/tickets/actions";
 import { TicketNotFoundError, createTicketService } from "@/lib/tickets/service";
 import { legalTransitionsFrom } from "@/lib/tickets/transitions";
@@ -60,15 +61,58 @@ export default async function TicketPage({
         to {name(ticket.assigneeId)}
       </p>
 
-      {ticket.description ? (
-        <p className="mt-6 whitespace-pre-wrap text-sm">{ticket.description}</p>
-      ) : null}
+      <section className="mt-8 rounded-lg border border-neutral-200 bg-white p-4 dark:border-neutral-800 dark:bg-neutral-900">
+        <h2 className="text-sm font-medium">Edit</h2>
+        <form action={updateTicketAction} className="mt-3 space-y-3">
+          <input type="hidden" name="ticketId" value={ticket.id} />
+          <input
+            name="title"
+            required
+            defaultValue={ticket.title}
+            aria-label="Title"
+            className="w-full rounded-md border border-neutral-300 bg-transparent px-3 py-2 text-sm outline-none focus:border-neutral-900 dark:border-neutral-700 dark:focus:border-neutral-300"
+          />
+          <textarea
+            name="description"
+            rows={3}
+            defaultValue={ticket.description}
+            placeholder="Description"
+            aria-label="Description"
+            className="w-full rounded-md border border-neutral-300 bg-transparent px-3 py-2 text-sm outline-none focus:border-neutral-900 dark:border-neutral-700 dark:focus:border-neutral-300"
+          />
+          <div className="flex flex-wrap items-center gap-2">
+            <select
+              name="assigneeId"
+              defaultValue={ticket.assigneeId ?? ""}
+              aria-label="Assignee"
+              className="rounded-md border border-neutral-300 bg-transparent px-3 py-2 text-sm dark:border-neutral-700"
+            >
+              <option value="">Unassigned</option>
+              {everyone.map((user) => (
+                <option key={user.id} value={user.id}>
+                  {user.displayName}
+                  {user.kind === "agent" ? " (agent)" : ""}
+                </option>
+              ))}
+            </select>
+            <button
+              type="submit"
+              className="rounded-md bg-neutral-900 px-4 py-2 text-sm font-medium text-white dark:bg-neutral-100 dark:text-neutral-900"
+            >
+              Save
+            </button>
+            <span className="text-xs text-neutral-500">
+              Status is not editable here: use a Transition.
+            </span>
+          </div>
+        </form>
+      </section>
 
       <section className="mt-8 rounded-lg border border-neutral-200 bg-white p-4 dark:border-neutral-800 dark:bg-neutral-900">
-        <h2 className="text-sm font-medium">Move this ticket</h2>
+        <h2 className="text-sm font-medium">Transition this ticket</h2>
         {legal.length === 0 ? (
           <p className="mt-2 text-sm text-neutral-500">
-            Nowhere to go from here.
+            No legal Transitions from here.
           </p>
         ) : (
           <form action={transitionTicketAction} className="mt-3 space-y-3">
@@ -87,7 +131,7 @@ export default async function TicketPage({
                   value={status}
                   className="rounded-md bg-neutral-900 px-3 py-1.5 text-sm font-medium text-white dark:bg-neutral-100 dark:text-neutral-900"
                 >
-                  Move to {status}
+                  Transition to {status}
                 </button>
               ))}
             </div>

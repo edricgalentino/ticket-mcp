@@ -7,6 +7,14 @@ import { getDatabase } from "@/lib/db";
 import { users } from "@/lib/db/schema";
 import { endSession, startSession } from "./session";
 
+/**
+ * A real hash to compare against when no account matches, so the failure path
+ * does the same KDF work as the success path. It must be a genuine 60-character
+ * bcrypt hash: a malformed string is length-checked and rejected in microseconds,
+ * which is the timing oracle this is supposed to close.
+ */
+const ABSENT_USER_HASH = bcrypt.hashSync(crypto.randomUUID(), 10);
+
 export async function signIn(
   _previous: { error?: string } | undefined,
   formData: FormData,
@@ -27,7 +35,7 @@ export async function signIn(
 
   // ADR 0002: an Agent has no password hash, so it can never pass this.
   if (!user?.passwordHash || user.kind !== "human") {
-    await bcrypt.compare(password, "$2b$10$invalidinvalidinvalidinvalidinvalidinvalidinvalidinvalidine");
+    await bcrypt.compare(password, ABSENT_USER_HASH);
     return invalid;
   }
   if (!(await bcrypt.compare(password, user.passwordHash))) return invalid;
