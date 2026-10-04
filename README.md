@@ -30,19 +30,16 @@ Sign in with a seeded account (`ana@ticket-mcp.local`) and the password in
 
 ## Connecting an agent
 
-Add to `.mcp.json`, with the token from `.env.local`:
+Copy `.mcp.json.example` to `.mcp.json` and paste the `MCP_BEARER_TOKEN` from
+`.env.local` into the `Authorization` header. `.mcp.json` is gitignored,
+because it holds a working token.
 
-```json
-{
-  "mcpServers": {
-    "ticket-mcp": {
-      "type": "http",
-      "url": "http://localhost:3000/mcp",
-      "headers": { "Authorization": "Bearer ${MCP_BEARER_TOKEN}" }
-    }
-  }
-}
-```
+Two things have to be true before a client can connect:
+
+1. The dev server is already running (`npm run dev`). MCP clients do not start
+   it for you, and a server that is not listening looks like a broken config.
+2. The client has been restarted since `.mcp.json` appeared. MCP servers are
+   read once at startup.
 
 A static bearer token is scaffolding, not the destination — see
 [ADR 0001](./docs/adr/0001-defer-mcp-oauth-behind-a-principal-seam.md).

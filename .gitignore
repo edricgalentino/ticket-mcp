@@ -45,6 +45,9 @@ yarn-error.log*
 # machine-specific: hardcodes a local Node path
 .claude/launch.json
 
+# holds a working bearer token; .mcp.json.example carries the shape
+.mcp.json
+
 # vercel
 .vercel
 

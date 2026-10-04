@@ -1,0 +1,11 @@
+{
+  "mcpServers": {
+    "ticket-mcp": {
+      "type": "http",
+      "url": "http://localhost:3000/mcp",
+      "headers": {
+        "Authorization": "Bearer PASTE_MCP_BEARER_TOKEN_FROM_ENV_LOCAL"
+      }
+    }
+  }
+}
