@@ -1,3 +1,7 @@
+---
+status: superseded by ADR-0004
+---
+
 # Agents are Users that cannot sign in
 
 A Ticket can be created by a person through the browser or by an agent over MCP,

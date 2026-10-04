@@ -23,26 +23,29 @@ is fixed and enforced. Transitions accumulate: a Ticket has a history of them.
 _Avoid_: Move, Change, Update, Status change
 
 **User**:
-An account that can sign in to the web application with an email address and a
-password.
+A person with an account. One row per real person, whether they are acting
+through the web application or through an Agent.
 _Avoid_: Account, Member, Person
 
 **Principal**:
-Whoever is making a request: a User signed in through the browser, or an Agent
-presenting a token. Distinct from User, because not every Principal is a person
-and not every User is making a request.
+Who is making a request and in which mode: a User, plus whether they are acting
+as themselves or as an Agent. Distinct from User, because a User is a standing
+fact and a Principal is a property of one request.
 _Avoid_: Caller, Identity, Actor, Subject
 
 **Agent**:
-An automated caller that reaches the system over MCP rather than through the
-browser. An Agent is represented as a User that cannot sign in, so that work it
-performs is attributable in the same way a person's is.
+A User acting through an automated tool over MCP rather than through the
+browser. Agent is a *mode of acting*, not an identity: the same person is one
+User whether they click a button or their agent calls a tool. Which mode was
+used is recorded alongside the action.
 _Avoid_: Bot, Client, Integration, Service account
 
 **Reporter**:
-The User a Ticket is attributed to as its creator. May be an Agent.
+The User a Ticket is attributed to as its creator, together with the mode they
+created it in.
 _Avoid_: Creator, Author, Requester, Owner
 
 **Assignee**:
-The User currently responsible for a Ticket. May be an Agent, and may be unset.
+The User currently responsible for a Ticket. May be unset. Has no mode: being
+responsible for something is not an act.
 _Avoid_: Owner, Responsible, Handler
