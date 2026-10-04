@@ -6,7 +6,12 @@
     "dev": "next dev",
     "build": "next build",
     "start": "next start",
-    "lint": "eslint"
+    "lint": "eslint",
+    "test": "vitest run",
+    "test:watch": "vitest",
+    "typecheck": "tsc --noEmit",
+    "seed": "tsx --tsconfig tsconfig.json scripts/seed.ts",
+    "smoke": "node scripts/smoke-mcp.mjs"
   },
   "dependencies": {
     "@modelcontextprotocol/sdk": "^1.32.0",

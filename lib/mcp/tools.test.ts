@@ -2,7 +2,7 @@ import { beforeEach, describe, expect, it } from "vitest";
 import { createInMemoryDatabase } from "@/lib/db";
 import { users } from "@/lib/db/schema";
 import { createTicketService } from "@/lib/tickets/service";
-import { createTicketTools } from "./tools";
+import { type ToolResult, createTicketTools } from "./tools";
 
 const AGENT = { userId: "u-agent", kind: "agent" as const };
 
@@ -33,8 +33,18 @@ beforeEach(async () => {
   ctx = await setup();
 });
 
-function payload(result: { content: { type: string; text: string }[] }) {
-  return JSON.parse(result.content[0].text);
+/** Narrows a tool result's first content block to text and parses it. */
+function payload(result: ToolResult) {
+  const [block] = result.content;
+  if (block?.type !== "text") {
+    throw new Error(`Expected a text content block, got ${block?.type}`);
+  }
+  return JSON.parse(block.text);
+}
+
+function textOf(result: ToolResult): string {
+  const [block] = result.content;
+  return block?.type === "text" ? block.text : "";
 }
 
 describe("the tool surface", () => {
@@ -92,7 +102,7 @@ describe("transition_ticket", () => {
     });
 
     expect(result.isError).toBe(true);
-    expect(result.content[0].text).toContain("InProgress");
+    expect(textOf(result)).toContain("InProgress");
   });
 
   it("rejects a status that is not a Status at all", async () => {

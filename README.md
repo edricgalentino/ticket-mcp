@@ -1,36 +1,74 @@
-This is a [Next.js](https://nextjs.org) project bootstrapped with [`create-next-app`](https://nextjs.org/docs/app/api-reference/cli/create-next-app).
+# Ticket MCP
 
-## Getting Started
+A ticket tracker with two faces: a web application for people, and an MCP
+server for agents. Both go through one service layer.
 
-First, run the development server:
+It exists to learn how an MCP-fronted service works end to end. It is not a
+replacement for anything, and it holds no real data.
+
+- **[CONTEXT.md](./CONTEXT.md)** — the domain language. Read it first.
+- **[docs/adr/](./docs/adr/)** — the three decisions worth not re-litigating.
+
+## Running it
+
+Requires Node >= 20.18.1 (`.nvmrc` pins 24).
 
 ```bash
+nvm use
+npm install
+cp .env.example .env.local   # then fill in the two secrets it describes
+npm run seed
 npm run dev
-# or
-yarn dev
-# or
-pnpm dev
-# or
-bun dev
 ```
 
-Open [http://localhost:3000](http://localhost:3000) with your browser to see the result.
+Generate the two secrets with `openssl rand -base64 32` and
+`openssl rand -hex 32`. `.env.local` is gitignored; nothing in it belongs in
+a commit.
 
-You can start editing the page by modifying `app/page.tsx`. The page auto-updates as you edit the file.
+Sign in with a seeded account (`ana@ticket-mcp.local`) and the password in
+`SEED_PASSWORD`. These are local development values only.
 
-This project uses [`next/font`](https://nextjs.org/docs/app/building-your-application/optimizing/fonts) to automatically optimize and load [Geist](https://vercel.com/font), a new font family for Vercel.
+## Connecting an agent
 
-## Learn More
+Add to `.mcp.json`, with the token from `.env.local`:
 
-To learn more about Next.js, take a look at the following resources:
+```json
+{
+  "mcpServers": {
+    "ticket-mcp": {
+      "type": "http",
+      "url": "http://localhost:3000/mcp",
+      "headers": { "Authorization": "Bearer ${MCP_BEARER_TOKEN}" }
+    }
+  }
+}
+```
 
-- [Next.js Documentation](https://nextjs.org/docs) - learn about Next.js features and API.
-- [Learn Next.js](https://nextjs.org/learn) - an interactive Next.js tutorial.
+A static bearer token is scaffolding, not the destination — see
+[ADR 0001](./docs/adr/0001-defer-mcp-oauth-behind-a-principal-seam.md).
 
-You can check out [the Next.js GitHub repository](https://github.com/vercel/next.js) - your feedback and contributions are welcome!
+### The tools
 
-## Deploy on Vercel
+| Tool | Notes |
+| --- | --- |
+| `create_ticket` | Starts in `Todo`, reported by the calling principal |
+| `get_ticket` | Returns the Ticket with its full Transition history |
+| `list_tickets` | Filter by status, assignee, or both |
+| `update_ticket` | Title, description, assignee. **Not status.** |
+| `delete_ticket` | Takes the history with it |
+| `transition_ticket` | The only way status changes. Refusals name the legal moves. |
 
-The easiest way to deploy your Next.js app is to use the [Vercel Platform](https://vercel.com/new?utm_medium=default-template&filter=next.js&utm_source=create-next-app&utm_campaign=create-next-app-readme) from the creators of Next.js.
+Status moves `Todo → InProgress → Done → Todo`. Nothing else is legal, and
+`update_ticket` refuses a `status` argument outright rather than ignoring it
+([ADR 0003](./docs/adr/0003-status-changes-only-through-transition-ticket.md)).
 
-Check out our [Next.js deployment documentation](https://nextjs.org/docs/app/building-your-application/deploying) for more details.
+## Checks
+
+```bash
+npm test          # 44 unit tests across the four agreed seams
+npm run typecheck
+npm run smoke     # drives the running server over HTTP, as an agent would
+```
+
+`npm run smoke` needs the dev server up and `MCP_BEARER_TOKEN` in the
+environment.

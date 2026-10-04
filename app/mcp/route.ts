@@ -1,0 +1,68 @@
+import { WebStandardStreamableHTTPServerTransport } from "@modelcontextprotocol/sdk/server/webStandardStreamableHttp.js";
+import { eq } from "drizzle-orm";
+import { createPrincipalResolver } from "@/lib/auth/principal";
+import { getDatabase } from "@/lib/db";
+import { users } from "@/lib/db/schema";
+import { createMcpServer } from "@/lib/mcp/server";
+import { createTicketTools } from "@/lib/mcp/tools";
+import { createTicketService } from "@/lib/tickets/service";
+
+export const dynamic = "force-dynamic";
+
+const UNAUTHORIZED = () =>
+  Response.json(
+    {
+      jsonrpc: "2.0",
+      error: { code: -32001, message: "Unauthorized: present a bearer token." },
+      id: null,
+    },
+    { status: 401, headers: { "WWW-Authenticate": 'Bearer realm="ticket-mcp"' } },
+  );
+
+async function agentUserId(): Promise<string | null> {
+  const email = process.env.MCP_AGENT_EMAIL;
+  if (!email) return null;
+  const [row] = await getDatabase()
+    .select({ id: users.id })
+    .from(users)
+    .where(eq(users.email, email))
+    .limit(1);
+  return row?.id ?? null;
+}
+
+export async function POST(request: Request): Promise<Response> {
+  const token = process.env.MCP_BEARER_TOKEN ?? "";
+  const userId = await agentUserId();
+  if (!token || !userId) return UNAUTHORIZED();
+
+  const principal = createPrincipalResolver({ token, agentUserId: userId })(
+    request,
+  );
+  if (!principal) return UNAUTHORIZED();
+
+  const tools = createTicketTools(createTicketService(getDatabase()));
+  const server = createMcpServer(tools, principal);
+
+  // Stateless: one transport per request, no session to keep.
+  const transport = new WebStandardStreamableHTTPServerTransport({
+    sessionIdGenerator: undefined,
+    enableJsonResponse: true,
+  });
+
+  await server.connect(transport);
+  try {
+    return await transport.handleRequest(request);
+  } finally {
+    await transport.close();
+  }
+}
+
+/** Stateless mode keeps no stream to resume and no session to delete. */
+export function GET(): Response {
+  return new Response("Method Not Allowed", {
+    status: 405,
+    headers: { Allow: "POST" },
+  });
+}
+
+export const DELETE = GET;

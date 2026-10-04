@@ -1,3 +1,4 @@
+import type { CallToolResult } from "@modelcontextprotocol/sdk/types.js";
 import { z } from "zod";
 import type { Principal } from "@/lib/auth/principal";
 import {
@@ -7,10 +8,8 @@ import {
 } from "@/lib/tickets/service";
 import { STATUSES } from "@/lib/tickets/transitions";
 
-export interface ToolResult {
-  content: { type: "text"; text: string }[];
-  isError?: boolean;
-}
+/** The SDK's own result shape, so handlers drop straight into a Server. */
+export type ToolResult = CallToolResult;
 
 export interface TicketTool {
   name: string;
