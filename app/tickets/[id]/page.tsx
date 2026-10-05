@@ -10,6 +10,7 @@ import {
 } from "@/lib/tickets/actions";
 import { TicketNotFoundError, createTicketService } from "@/lib/tickets/service";
 import { legalTransitionsFrom } from "@/lib/tickets/transitions";
+import { Actor } from "@/app/_components/actor";
 import { StatusBadge } from "@/app/_components/status-badge";
 
 export const dynamic = "force-dynamic";
@@ -56,9 +57,9 @@ export default async function TicketPage({
       </div>
 
       <p className="mt-2 text-sm text-neutral-500">
-        Reported by {name(ticket.reporterId)}
-        {byId.get(ticket.reporterId)?.kind === "agent" ? " 🤖" : ""} · assigned
-        to {name(ticket.assigneeId)}
+        Reported by{" "}
+        <Actor name={name(ticket.reporterId)} kind={ticket.reporterKind} /> ·
+        assigned to {name(ticket.assigneeId)}
       </p>
 
       <section className="mt-8 rounded-lg border border-neutral-200 bg-white p-4 dark:border-neutral-800 dark:bg-neutral-900">
@@ -157,8 +158,7 @@ export default async function TicketPage({
                 </span>
                 <span className="text-neutral-500">
                   {" "}
-                  by {name(entry.actorId)}
-                  {byId.get(entry.actorId)?.kind === "agent" ? " 🤖" : ""}
+                  by <Actor name={name(entry.actorId)} kind={entry.actorKind} />
                 </span>
                 {entry.note ? (
                   <p className="mt-1 text-neutral-600 dark:text-neutral-400">

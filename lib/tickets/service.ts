@@ -102,6 +102,7 @@ export function createTicketService(db: Database) {
           description: input.description ?? "",
           status: "Todo",
           reporterId: actor.userId,
+          reporterKind: actor.kind,
           assigneeId: input.assigneeId ?? null,
           createdAt: now,
           updatedAt: now,
@@ -197,6 +198,7 @@ export function createTicketService(db: Database) {
             toStatus: input.to,
             note: input.note ?? null,
             actorId: actor.userId,
+            actorKind: actor.kind,
             createdAt: now,
           })
           .run();

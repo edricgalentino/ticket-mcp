@@ -30,6 +30,10 @@ export const tickets = sqliteTable(
     reporterId: text("reporter_id")
       .notNull()
       .references(() => users.id),
+    // How the reporter acted, not who they are. ADR 0004.
+    reporterKind: text("reporter_kind", { enum: ["human", "agent"] })
+      .notNull()
+      .default("human"),
     assigneeId: text("assignee_id").references(() => users.id),
     createdAt: text("created_at")
       .notNull()
@@ -65,6 +69,10 @@ export const transitions = sqliteTable(
     actorId: text("actor_id")
       .notNull()
       .references(() => users.id),
+    // How the actor acted. ADR 0004.
+    actorKind: text("actor_kind", { enum: ["human", "agent"] })
+      .notNull()
+      .default("human"),
     createdAt: text("created_at")
       .notNull()
       .default(sql`CURRENT_TIMESTAMP`),

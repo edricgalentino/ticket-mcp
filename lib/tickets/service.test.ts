@@ -256,3 +256,49 @@ describe("deleteTicket", () => {
     );
   });
 });
+
+// ADR 0004: the mode an action was taken in is recorded against the action,
+// not inferred from the identity that took it.
+describe("recording how an action was taken", () => {
+  it("records that a human reported a ticket", async () => {
+    const ticket = await ctx.service.createTicket(ANA, { title: "By hand" });
+    expect(ticket.reporterKind).toBe("human");
+  });
+
+  it("records that an agent reported a ticket", async () => {
+    const ticket = await ctx.service.createTicket(AGENT, { title: "By tool" });
+    expect(ticket.reporterKind).toBe("agent");
+  });
+
+  it("records the mode of each transition independently of the reporter", async () => {
+    const ticket = await ctx.service.createTicket(ANA, { title: "Handover" });
+    await ctx.service.transitionTicket(AGENT, {
+      ticketId: ticket.id,
+      to: "InProgress",
+    });
+    await ctx.service.transitionTicket(ANA, { ticketId: ticket.id, to: "Done" });
+
+    const after = await ctx.service.getTicket(ticket.id);
+    expect(after.reporterKind).toBe("human");
+    expect(after.history.map((h) => [h.actorId, h.actorKind])).toEqual([
+      ["u-agent", "agent"],
+      ["u-ana", "human"],
+    ]);
+  });
+
+  it("lets one User appear in both modes on the same ticket", async () => {
+    const ANA_AS_AGENT: Principal = { userId: "u-ana", kind: "agent" };
+    const ticket = await ctx.service.createTicket(ANA, { title: "Two modes" });
+    await ctx.service.transitionTicket(ANA_AS_AGENT, {
+      ticketId: ticket.id,
+      to: "InProgress",
+    });
+
+    const after = await ctx.service.getTicket(ticket.id);
+    expect(after.reporterKind).toBe("human");
+    expect(after.history[0]).toMatchObject({
+      actorId: "u-ana",
+      actorKind: "agent",
+    });
+  });
+});

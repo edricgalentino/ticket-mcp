@@ -6,6 +6,7 @@ import { getDatabase } from "@/lib/db";
 import { users } from "@/lib/db/schema";
 import { createTicketAction } from "@/lib/tickets/actions";
 import { createTicketService } from "@/lib/tickets/service";
+import { Actor } from "./_components/actor";
 import { StatusBadge } from "./_components/status-badge";
 
 export const dynamic = "force-dynamic";
@@ -97,8 +98,10 @@ export default async function TicketsPage() {
                   {ticket.title}
                 </span>
                 <span className="shrink-0 text-xs text-neutral-500">
-                  {reporter?.kind === "agent" ? "🤖 " : ""}
-                  {reporter?.displayName ?? "unknown"}
+                  <Actor
+                    name={reporter?.displayName ?? "unknown"}
+                    kind={ticket.reporterKind}
+                  />
                   {assignee ? ` → ${assignee.displayName}` : ""}
                 </span>
               </Link>
