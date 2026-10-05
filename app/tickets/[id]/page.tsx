@@ -1,6 +1,6 @@
 import Link from "next/link";
 import { notFound, redirect } from "next/navigation";
-import { currentUser } from "@/lib/auth/session";
+import { currentUser } from "@/lib/auth/current-user";
 import { getDatabase } from "@/lib/db";
 import { users } from "@/lib/db/schema";
 import {
@@ -21,7 +21,7 @@ export default async function TicketPage({
   params: Promise<{ id: string }>;
 }) {
   const me = await currentUser();
-  if (!me) redirect("/login");
+  if (!me) redirect("/sign-in");
 
   const { id } = await params;
   const db = getDatabase();
@@ -92,7 +92,6 @@ export default async function TicketPage({
               {everyone.map((user) => (
                 <option key={user.id} value={user.id}>
                   {user.displayName}
-                  {user.kind === "agent" ? " (agent)" : ""}
                 </option>
               ))}
             </select>

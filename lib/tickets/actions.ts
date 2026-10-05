@@ -2,7 +2,7 @@
 
 import { revalidatePath } from "next/cache";
 import { redirect } from "next/navigation";
-import { currentPrincipal } from "@/lib/auth/session";
+import { currentPrincipal } from "@/lib/auth/current-user";
 import { getDatabase } from "@/lib/db";
 import { createTicketService } from "./service";
 import { isStatus } from "./transitions";

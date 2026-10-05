@@ -1,7 +1,7 @@
 import Link from "next/link";
 import { redirect } from "next/navigation";
-import { signOut } from "@/lib/auth/actions";
-import { currentUser } from "@/lib/auth/session";
+import { SignOutButton } from "@clerk/nextjs";
+import { currentUser } from "@/lib/auth/current-user";
 import { getDatabase } from "@/lib/db";
 import { users } from "@/lib/db/schema";
 import { createTicketAction } from "@/lib/tickets/actions";
@@ -13,7 +13,7 @@ export const dynamic = "force-dynamic";
 
 export default async function TicketsPage() {
   const me = await currentUser();
-  if (!me) redirect("/login");
+  if (!me) redirect("/sign-in");
 
   const db = getDatabase();
   const [tickets, everyone] = await Promise.all([
@@ -31,14 +31,14 @@ export default async function TicketsPage() {
             Signed in as {me.displayName}
           </p>
         </div>
-        <form action={signOut}>
+        <SignOutButton>
           <button
-            type="submit"
+            type="button"
             className="text-sm text-neutral-500 underline-offset-4 hover:underline"
           >
             Sign out
           </button>
-        </form>
+        </SignOutButton>
       </header>
 
       <form
@@ -62,7 +62,6 @@ export default async function TicketsPage() {
             {everyone.map((user) => (
               <option key={user.id} value={user.id}>
                 {user.displayName}
-                {user.kind === "agent" ? " (agent)" : ""}
               </option>
             ))}
           </select>

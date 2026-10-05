@@ -1,26 +1,29 @@
-import { sql } from "drizzle-orm";
-import { index, integer, sqliteTable, text } from "drizzle-orm/sqlite-core";
+import {
+  index,
+  bigserial,
+  pgTable,
+  text,
+  timestamp,
+} from "drizzle-orm/pg-core";
 import { STATUSES } from "@/lib/tickets/transitions";
 
+const MODES = ["human", "agent"] as const;
+
 /**
- * A User is a sign-in identity. An Agent is a User that cannot sign in: see
- * docs/adr/0002-agents-are-users-that-cannot-sign-in.md. Agents are
- * distinguished by `kind`, and carry no password hash at all.
+ * A User is a person. One row per real person, keyed by their Clerk user id.
+ * There is no password column and no kind: Clerk owns credentials, and how
+ * someone acted is recorded against the action instead (ADR 0004).
  */
-export const users = sqliteTable("users", {
+export const users = pgTable("users", {
   id: text("id").primaryKey(),
   email: text("email").notNull().unique(),
   displayName: text("display_name").notNull(),
-  kind: text("kind", { enum: ["human", "agent"] })
+  createdAt: timestamp("created_at", { withTimezone: true })
     .notNull()
-    .default("human"),
-  passwordHash: text("password_hash"),
-  createdAt: text("created_at")
-    .notNull()
-    .default(sql`CURRENT_TIMESTAMP`),
+    .defaultNow(),
 });
 
-export const tickets = sqliteTable(
+export const tickets = pgTable(
   "tickets",
   {
     id: text("id").primaryKey(),
@@ -31,20 +34,21 @@ export const tickets = sqliteTable(
       .notNull()
       .references(() => users.id),
     // How the reporter acted, not who they are. ADR 0004.
-    reporterKind: text("reporter_kind", { enum: ["human", "agent"] })
+    reporterKind: text("reporter_kind", { enum: MODES })
       .notNull()
       .default("human"),
     assigneeId: text("assignee_id").references(() => users.id),
-    createdAt: text("created_at")
+    createdAt: timestamp("created_at", { withTimezone: true })
       .notNull()
-      .default(sql`CURRENT_TIMESTAMP`),
-    updatedAt: text("updated_at")
+      .defaultNow(),
+    updatedAt: timestamp("updated_at", { withTimezone: true })
       .notNull()
-      .default(sql`CURRENT_TIMESTAMP`),
+      .defaultNow(),
   },
   (table) => [
     index("tickets_status_idx").on(table.status),
     index("tickets_assignee_idx").on(table.assigneeId),
+    index("tickets_created_idx").on(table.createdAt),
   ],
 );
 
@@ -52,14 +56,13 @@ export const tickets = sqliteTable(
  * A Transition is a recorded event, not a column write. Deleting a Ticket
  * takes its history with it.
  *
- * The key is a monotonic integer rather than a UUID: history is ordered, and
- * CURRENT_TIMESTAMP only has second precision, so several Transitions recorded
- * in the same second would otherwise have no defined order.
+ * The key is a monotonic integer because history is ordered and two
+ * Transitions can share a timestamp.
  */
-export const transitions = sqliteTable(
+export const transitions = pgTable(
   "transitions",
   {
-    id: integer("id").primaryKey({ autoIncrement: true }),
+    id: bigserial("id", { mode: "number" }).primaryKey(),
     ticketId: text("ticket_id")
       .notNull()
       .references(() => tickets.id, { onDelete: "cascade" }),
@@ -70,16 +73,15 @@ export const transitions = sqliteTable(
       .notNull()
       .references(() => users.id),
     // How the actor acted. ADR 0004.
-    actorKind: text("actor_kind", { enum: ["human", "agent"] })
+    actorKind: text("actor_kind", { enum: MODES }).notNull().default("human"),
+    createdAt: timestamp("created_at", { withTimezone: true })
       .notNull()
-      .default("human"),
-    createdAt: text("created_at")
-      .notNull()
-      .default(sql`CURRENT_TIMESTAMP`),
+      .defaultNow(),
   },
   (table) => [index("transitions_ticket_idx").on(table.ticketId)],
 );
 
+export type Mode = (typeof MODES)[number];
 export type UserRow = typeof users.$inferSelect;
 export type TicketRow = typeof tickets.$inferSelect;
 export type TransitionRow = typeof transitions.$inferSelect;

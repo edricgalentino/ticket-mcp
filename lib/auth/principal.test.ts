@@ -1,56 +1,64 @@
-import { describe, expect, it } from "vitest";
-import { createPrincipalResolver } from "./principal";
+import { beforeEach, describe, expect, it, vi } from "vitest";
 
-const TOKEN = "test-token-not-a-real-secret";
-const resolve = createPrincipalResolver({
-  token: TOKEN,
-  agentUserId: "u-agent",
-});
+/**
+ * Clerk is an external boundary, so it is mocked here; everything inside the
+ * seam -- deciding whether a request yields a Principal, and in which mode --
+ * is this project's own and is what these tests cover. See ADR 0001.
+ */
+const authenticateRequest = vi.fn();
+vi.mock("@clerk/nextjs/server", () => ({
+  clerkClient: async () => ({ authenticateRequest }),
+}));
 
-function request(authorization?: string): Request {
-  return new Request("http://localhost/mcp", {
-    headers: authorization ? { authorization } : {},
-  });
-}
+const { resolveAgentPrincipal } = await import("./principal");
 
-describe("resolvePrincipal", () => {
-  it("resolves a valid bearer token to the Agent principal", () => {
-    expect(resolve(request(`Bearer ${TOKEN}`))).toEqual({
-      userId: "u-agent",
+const request = () => new Request("https://example.test/mcp");
+
+beforeEach(() => authenticateRequest.mockReset());
+
+describe("resolveAgentPrincipal", () => {
+  it("resolves an authenticated token to an Agent principal", async () => {
+    authenticateRequest.mockResolvedValue({
+      isAuthenticated: true,
+      toAuth: () => ({ userId: "user_abc" }),
+    });
+
+    expect(await resolveAgentPrincipal(request())).toEqual({
+      userId: "user_abc",
       kind: "agent",
     });
   });
 
-  it("accepts the scheme case-insensitively, as RFC 7235 requires", () => {
-    expect(resolve(request(`bearer ${TOKEN}`))).not.toBeNull();
-  });
-
-  it("rejects a request with no Authorization header", () => {
-    expect(resolve(request())).toBeNull();
-  });
-
-  it("rejects the wrong token", () => {
-    expect(resolve(request("Bearer not-the-token"))).toBeNull();
-  });
-
-  it("rejects a token of the right length but wrong content", () => {
-    expect(resolve(request(`Bearer ${"x".repeat(TOKEN.length)}`))).toBeNull();
-  });
-
-  it("rejects a bare token with no scheme", () => {
-    expect(resolve(request(TOKEN))).toBeNull();
-  });
-
-  it("rejects another scheme carrying the right value", () => {
-    expect(resolve(request(`Basic ${TOKEN}`))).toBeNull();
-  });
-
-  it("refuses to authenticate anyone when no token is configured", () => {
-    const unconfigured = createPrincipalResolver({
-      token: "",
-      agentUserId: "u-agent",
+  it("refuses a request Clerk did not authenticate", async () => {
+    authenticateRequest.mockResolvedValue({
+      isAuthenticated: false,
+      toAuth: () => null,
     });
-    expect(unconfigured(request("Bearer "))).toBeNull();
-    expect(unconfigured(request())).toBeNull();
+
+    expect(await resolveAgentPrincipal(request())).toBeNull();
+  });
+
+  // Authenticated but anonymous would otherwise produce a Principal with an
+  // empty userId, which every foreign key downstream would then reject.
+  it("refuses an authenticated request that carries no user", async () => {
+    authenticateRequest.mockResolvedValue({
+      isAuthenticated: true,
+      toAuth: () => null,
+    });
+
+    expect(await resolveAgentPrincipal(request())).toBeNull();
+  });
+
+  it("asks Clerk for an OAuth token specifically, not a session cookie", async () => {
+    authenticateRequest.mockResolvedValue({
+      isAuthenticated: false,
+      toAuth: () => null,
+    });
+
+    await resolveAgentPrincipal(request());
+
+    expect(authenticateRequest).toHaveBeenCalledWith(expect.any(Request), {
+      acceptsToken: "oauth_token",
+    });
   });
 });

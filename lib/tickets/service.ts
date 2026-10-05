@@ -1,9 +1,13 @@
-import { and, asc, desc, eq, isNull } from "drizzle-orm";
+import { and, asc, desc, eq, inArray, isNull, sql } from "drizzle-orm";
 import type { Principal } from "@/lib/auth/principal";
 import type { Database } from "@/lib/db";
 import { tickets, transitions } from "@/lib/db/schema";
 import type { TicketRow, TransitionRow } from "@/lib/db/schema";
-import { type Status, isLegalTransition, legalTransitionsFrom } from "./transitions";
+import {
+  type Status,
+  legalSourcesFor,
+  legalTransitionsFrom,
+} from "./transitions";
 
 export class TicketNotFoundError extends Error {
   constructor(readonly ticketId: string) {
@@ -64,6 +68,21 @@ export interface TransitionTicketInput {
   note?: string | null;
 }
 
+/** `db.execute` returns raw rows, so the column names need mapping back. */
+function toTicketRow(row: Record<string, unknown>): TicketRow {
+  return {
+    id: row.id as string,
+    title: row.title as string,
+    description: row.description as string,
+    status: row.status as Status,
+    reporterId: row.reporter_id as string,
+    reporterKind: row.reporter_kind as TicketRow["reporterKind"],
+    assigneeId: (row.assignee_id as string | null) ?? null,
+    createdAt: new Date(row.created_at as string),
+    updatedAt: new Date(row.updated_at as string),
+  };
+}
+
 export function createTicketService(db: Database) {
   async function requireTicket(ticketId: string): Promise<TicketRow> {
     const [row] = await db
@@ -90,10 +109,7 @@ export function createTicketService(db: Database) {
       actor: Principal,
       input: CreateTicketInput,
     ): Promise<TicketRow> {
-      // Written explicitly rather than left to the DDL's CURRENT_TIMESTAMP,
-      // which has second precision and a different string format. One shape
-      // per column, and enough precision for "newest first" to mean something.
-      const now = new Date().toISOString();
+      const now = new Date();
       const [row] = await db
         .insert(tickets)
         .values({
@@ -143,7 +159,7 @@ export function createTicketService(db: Database) {
 
       // Built field by field rather than spread, so that a `status` arriving
       // on an untyped payload cannot reach the column. ADR 0003.
-      const patch: Partial<TicketRow> = { updatedAt: new Date().toISOString() };
+      const patch: Partial<TicketRow> = { updatedAt: new Date() };
       if (input.title !== undefined) patch.title = input.title;
       if (input.description !== undefined) patch.description = input.description;
       if (input.assigneeId !== undefined) patch.assigneeId = input.assigneeId;
@@ -160,51 +176,53 @@ export function createTicketService(db: Database) {
       actor: Principal,
       input: TransitionTicketInput,
     ): Promise<TicketRow> {
-      // The read, the legality check and both writes are one transaction, so
-      // two concurrent transitions cannot both pass the check and leave the
-      // history disagreeing with the Ticket's status.
-      return db.transaction((tx) => {
-        const [ticket] = tx
-          .select()
-          .from(tickets)
-          .where(eq(tickets.id, input.ticketId))
-          .limit(1)
-          .all();
-        if (!ticket) throw new TicketNotFoundError(input.ticketId);
+      const sources = legalSourcesFor(input.to);
+      const sourceList = sql.join(
+        sources.map((status) => sql`${status}`),
+        sql`, `,
+      );
 
-        const from = ticket.status;
-        if (!isLegalTransition(from, input.to)) {
-          throw new IllegalTransitionError(
-            from,
-            input.to,
-            legalTransitionsFrom(from),
-          );
-        }
+      // One statement, so the check and both writes cannot come apart.
+      // `target` reads the current Status; the UPDATE only fires when that
+      // Status may legally reach `to`; the INSERT selects from the UPDATE's
+      // result. So no history row can describe a move that did not happen,
+      // and no move can happen without one. This stands in for an interactive
+      // transaction, which Neon's HTTP driver does not support.
+      //
+      // The from_status recorded is the one actually read, not an assumption
+      // about which source was legal -- that matters the moment any Status has
+      // more than one legal predecessor.
+      const moved = await db.execute(sql`
+        WITH target AS (
+          SELECT id, status FROM tickets WHERE id = ${input.ticketId} FOR UPDATE
+        ), moved AS (
+          UPDATE tickets
+             SET status = ${input.to}, updated_at = NOW()
+            FROM target
+           WHERE tickets.id = target.id
+             AND target.status IN (${sourceList})
+          RETURNING tickets.*, target.status AS from_status
+        ), logged AS (
+          INSERT INTO transitions
+            (ticket_id, from_status, to_status, note, actor_id, actor_kind)
+          SELECT id, from_status, ${input.to}, ${input.note ?? null},
+                 ${actor.userId}, ${actor.kind}
+            FROM moved
+          RETURNING id
+        )
+        SELECT * FROM moved
+      `);
 
-        // One timestamp for both rows: they describe the same event.
-        const now = new Date().toISOString();
+      const row = (moved.rows as Record<string, unknown>[])[0];
+      if (row) return toTicketRow(row);
 
-        const [updated] = tx
-          .update(tickets)
-          .set({ status: input.to, updatedAt: now })
-          .where(eq(tickets.id, ticket.id))
-          .returning()
-          .all();
-
-        tx.insert(transitions)
-          .values({
-            ticketId: ticket.id,
-            fromStatus: from,
-            toStatus: input.to,
-            note: input.note ?? null,
-            actorId: actor.userId,
-            actorKind: actor.kind,
-            createdAt: now,
-          })
-          .run();
-
-        return updated;
-      });
+      // Nothing moved. Work out which of the two reasons it was.
+      const ticket = await requireTicket(input.ticketId);
+      throw new IllegalTransitionError(
+        ticket.status,
+        input.to,
+        legalTransitionsFrom(ticket.status),
+      );
     },
   };
 }

@@ -1,6 +1,6 @@
 import { beforeEach, describe, expect, it } from "vitest";
 import type { Principal } from "@/lib/auth/principal";
-import { createInMemoryDatabase } from "@/lib/db";
+import { createTestDatabase } from "@/lib/db/testing";
 import { users } from "@/lib/db/schema";
 import {
   IllegalTransitionError,
@@ -13,16 +13,11 @@ const BO: Principal = { userId: "u-bo", kind: "human" };
 const AGENT: Principal = { userId: "u-agent", kind: "agent" };
 
 async function setup() {
-  const db = createInMemoryDatabase();
+  const db = await createTestDatabase();
   await db.insert(users).values([
     { id: "u-ana", email: "ana@example.test", displayName: "Ana" },
     { id: "u-bo", email: "bo@example.test", displayName: "Bo" },
-    {
-      id: "u-agent",
-      email: "agent@example.test",
-      displayName: "Claude",
-      kind: "agent",
-    },
+    { id: "u-agent", email: "agent@example.test", displayName: "Claude" },
   ]);
   return { db, service: createTicketService(db) };
 }

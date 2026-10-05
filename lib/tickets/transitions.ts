@@ -28,3 +28,11 @@ export function isLegalTransition(from: Status, to: Status): boolean {
 export function isStatus(value: unknown): value is Status {
   return STATUSES.includes(value as Status);
 }
+
+/**
+ * The Statuses a Ticket may legally be in to reach `to`. Derived from the same
+ * table, so the two can never disagree.
+ */
+export function legalSourcesFor(to: Status): Status[] {
+  return STATUSES.filter((from) => isLegalTransition(from, to));
+}
